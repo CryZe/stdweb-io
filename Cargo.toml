@@ -1,0 +1,16 @@
+[package]
+name = "stdweb-io"
+version = "0.1.0"
+authors = ["Christopher Serr <christopher.serr@gmail.com>"]
+
+[dependencies]
+futures = "0.1.16"
+http = "0.1.1"
+stdweb = "0.1.3"
+
+[workspace]
+members = ["stdweb-io-html"]
+
+[profile.release]
+lto = true
+panic = "abort"

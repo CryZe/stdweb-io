@@ -1,0 +1,8 @@
+[package]
+name = "stdweb-io-html"
+version = "0.1.0"
+authors = ["Christopher Serr <christopher.serr@gmail.com>"]
+
+[dependencies]
+futures-await = { git = 'https://github.com/alexcrichton/futures-await' }
+stdweb-io = { path = ".." }
