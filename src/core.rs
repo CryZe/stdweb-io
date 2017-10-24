@@ -63,6 +63,17 @@ struct SpawnedTask {
 fn execute_spawn(spawned_ptr: *const SpawnedTask) {
     let spawned = unsafe { &*spawned_ptr };
 
+    // This is probably suboptimal, as a resubmission of the same Task while it
+    // is being executed results in a panic. It is not entirely clear if a Task
+    // is allowed to do that, but I would expect that this is valid behavior, as
+    // the notification could happen while the Task is still executing, in a
+    // truly multi-threaded situation. So we probably have to deal with it here
+    // at some point too. This already happened in the IntervalStream, so that
+    // should be cleaned up then as well then. The easiest solution is to try to
+    // lock it instead and if it fails, increment a counter. The one that
+    // initially blocked the RefCell then just reexecutes the Task until the
+    // Task is finished or the counter reaches 0.
+
     if spawned
         .spawn
         .borrow_mut()

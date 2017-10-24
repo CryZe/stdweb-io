@@ -34,13 +34,13 @@ pub extern "C" fn do_stuff() {
         let request = async_block! {
             println!("Starting Request");
 
-            await!(fetch(
+            let response = await!(fetch(
                 Request::get("https://splits.io/api/v3/games?search=sonic")
                     .body(())
                     .unwrap(),
             ).map_err(|_| ()))?;
 
-            println!("Request finished");
+            println!("Request finished: {:#?}", response);
 
             Ok::<(), ()>(())
         };

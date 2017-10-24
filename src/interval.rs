@@ -1,18 +1,33 @@
+use futures::unsync::mpsc::{unbounded, UnboundedReceiver};
+use futures::{Poll, Stream};
+use stdweb;
 use std::time::Duration;
 use stdweb::unstable::TryInto;
-use futures::{task, Async, Poll};
-use {stdweb, Stream};
+use std::mem::ManuallyDrop;
 
-pub struct IntervalStream(f64);
+pub struct IntervalStream {
+    receiver: ManuallyDrop<UnboundedReceiver<()>>,
+    interval_ref: f64,
+}
 
 impl Drop for IntervalStream {
     fn drop(&mut self) {
-        // println!("Drop stream");
-        let wrapped_stream_id = self.0;
+        unsafe {
+            // Drop the Receiver before Sender. The Sender would otherwise try
+            // to resubmit the Task to the Executor, which at least at the
+            // moment causes a panic, as the Executor might be dropping this
+            // Stream while it is already executing the Task, so that would be a
+            // concurrent execution of the same Task, which the RefCell in our
+            // Executor prevents by panicking.
+            ManuallyDrop::drop(&mut self.receiver);
+        }
+        let interval_ref = self.interval_ref;
         js! {
-            const wrappedStream = Module.STDWEB.acquire_js_reference(@{wrapped_stream_id});
-            clearInterval(wrappedStream.intervalId);
-            Module.STDWEB.decrement_refcount(@{wrapped_stream_id});
+            const intervalRef = @{interval_ref};
+            const intervalInfo = Module.STDWEB.acquire_js_reference(intervalRef);
+            clearInterval(intervalInfo.id);
+            intervalInfo.resolve.drop();
+            Module.STDWEB.decrement_refcount(intervalRef);
         }
     }
 }
@@ -22,63 +37,41 @@ impl Stream for IntervalStream {
     type Error = ();
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let wrapped_stream_id = self.0;
-
-        let notify_count: f64 = js! {
-            const wrappedStream = Module.STDWEB.acquire_js_reference(@{wrapped_stream_id});
-            return wrappedStream.notifyCount;
-        }.try_into()
-            .expect("Expected Notify Count for Interval Stream");
-
-        if notify_count > 0.0 {
-            js! {
-                const wrappedStream = Module.STDWEB.acquire_js_reference(@{wrapped_stream_id});
-                wrappedStream.notifyCount -= 1;
-            }
-            Ok(Async::Ready(Some(())))
-        } else {
-            let task = task::current();
-            let notify = move || {
-                task.notify();
-            };
-            js! {
-                const wrappedStream = Module.STDWEB.acquire_js_reference(@{wrapped_stream_id});
-                const notify = @{notify};
-                wrappedStream.notifier = notify;
-            }
-            Ok(Async::NotReady)
-        }
+        Ok(self.receiver.poll().expect("Unexpected cancel"))
     }
 }
 
 pub fn interval(duration: Duration) -> IntervalStream {
     stdweb::initialize();
     let milli = duration.as_secs() as f64 * 1_000.0 + duration.subsec_nanos() as f64 / 1_000_000.0;
+    let (tx, rx) = unbounded();
 
-    let wrapped_stream_id: f64 = js! {
-        const wrappedStream = {
-            notifyCount: 0,
-            intervalId: null,
-            notifier: null,
-        };
+    let resolve = move || {
+        tx.unbounded_send(()).ok();
+    };
+
+    let interval_ref = js! {
+        const resolve = @{resolve};
         const milli = @{milli};
 
-        wrappedStream.intervalId = setInterval(
+        const intervalInfo = {
+            id: null,
+            resolve: resolve,
+        };
+
+        intervalInfo.id = setInterval(
             function() {
-                wrappedStream.notifyCount += 1;
-                const notifier = wrappedStream.notifier;
-                if (notifier) {
-                    wrappedStream.notifier = null;
-                    notifier();
-                    notifier.drop();
-                }
+                intervalInfo.resolve();
             },
             milli
         );
 
-        return Module.STDWEB.acquire_rust_reference(wrappedStream);
+        return Module.STDWEB.acquire_rust_reference(intervalInfo);
     }.try_into()
         .expect("Expected Reference to Interval Stream");
 
-    IntervalStream(wrapped_stream_id)
+    IntervalStream {
+        receiver: ManuallyDrop::new(rx),
+        interval_ref,
+    }
 }
