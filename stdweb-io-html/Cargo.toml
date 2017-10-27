@@ -6,3 +6,6 @@ authors = ["Christopher Serr <christopher.serr@gmail.com>"]
 [dependencies]
 futures-await = { git = 'https://github.com/alexcrichton/futures-await' }
 stdweb-io = { path = ".." }
+serde = "*"
+serde_json = "*"
+serde_derive = "*"

@@ -14,6 +14,6 @@ mod timeout;
 mod interval;
 
 pub use core::{spawn, spawn_deferred, spawn_deferred_fn, spawn_fn};
-pub use fetch::{fetch, FetchFuture};
+pub use fetch::{fetch, AsyncBody, BodyData, BodyFuture, FetchFuture};
 pub use timeout::{defer, timeout, TimeoutFuture};
 pub use interval::{interval, IntervalStream};

@@ -2,6 +2,10 @@
 #![no_main]
 
 extern crate futures_await as futures;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
 extern crate stdweb_io;
 
 use futures::prelude::*;
@@ -9,6 +13,22 @@ use futures::prelude::*;
 use stdweb_io::{fetch, interval, spawn, timeout};
 use stdweb_io::http::Request;
 use std::time::Duration;
+
+#[derive(Deserialize, Debug)]
+struct Games {
+    games: Vec<Game>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Game {
+    name: String,
+    categories: Vec<Category>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Category {
+    name: String,
+}
 
 #[no_mangle]
 pub extern "C" fn do_stuff() {
@@ -41,6 +61,14 @@ pub extern "C" fn do_stuff() {
             ).map_err(|_| ()))?;
 
             println!("Request finished: {:#?}", response);
+
+            let (_, body) = response.into_parts();
+
+            let body = await!(body.get())?;
+
+            let games: Games = serde_json::from_slice(&body).unwrap();
+
+            println!("Games: {:#?}", games);
 
             Ok::<(), ()>(())
         };
